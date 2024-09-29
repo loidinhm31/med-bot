@@ -4,14 +4,15 @@ mod handlers;
 mod repositories;
 mod config;
 mod services;
+mod dto;
 
 use crate::config::config::{MongoClient, MongoClientBuilder};
 use crate::handlers::med_handler;
 use crate::scheduler::start_scheduler;
+use crate::services::med_service;
 use crate::services::med_service::{MedService, MedServiceBuilder};
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
 use reqwest::Client;
-
 
 #[get("/healthz")]
 async fn health() -> impl Responder {
@@ -47,11 +48,13 @@ async fn main() -> std::io::Result<()> {
     log::info!("Starting HTTP server: go to http://127.0.0.1:8082");
 
     let mongo_client = MongoClientBuilder::new().await
-        .with_user_collection()
         .with_dynamic_collection()
+        .with_user_collection()
+        .with_doctor_collection()
         .build();
 
-    let med_service = MedServiceBuilder::new().build();
+    let med_service = MedServiceBuilder::new(mongo_client.doctor_collection.clone())
+        .build();
 
     let app_state = web::Data::new(AppState {
         client: Client::new(),
@@ -74,6 +77,7 @@ async fn main() -> std::io::Result<()> {
             .service(med_handler::search_med)
             .service(med_handler::get_appointments)
             .service(med_handler::analyze)
+            .service(med_handler::get_doctor)
     })
         .bind(("127.0.0.1", 8082))?
         .run()

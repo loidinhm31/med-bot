@@ -1,31 +1,33 @@
-use crate::models::appointment_model::{AppointmentApiResponse, Day, TimeSlot};
+use crate::dto::appointment_model::{AppointmentApiResponse, Day, TimeSlot};
+use crate::dto::search_model::{ResultItem, SearchApiResponse};
 use crate::models::doctor_appointment::{AppointmentPicking, DoctorAppointment};
-use crate::models::search_model::{ResultItem, SearchApiResponse};
+use crate::models::documents::Doctor;
+use crate::repositories::doctor_repository::{MongoDoctorRepository, MongoDoctorRepositoryBuilder};
 use chrono::{Datelike, NaiveDate, NaiveDateTime};
 use cron::TimeUnitSpec;
+use mongodb::Collection;
 use reqwest::{Client, Error};
 use std::collections::HashMap;
 
-#[derive(Debug, PartialEq)]
 pub struct MedService {
-    bar: String,
+    mongo_doctor_repository: MongoDoctorRepository,
 }
 
 impl MedService {}
 
 impl MedService {
-    pub fn builder() -> MedServiceBuilder {
-        MedServiceBuilder::default()
+    pub fn builder(collection: Collection<Doctor>) -> MedServiceBuilder {
+        MedServiceBuilder::new(collection)
     }
 
-    pub async fn search_med(&self, client: &Client) -> Result<Vec<SearchApiResponse>, Box<Error>> {
+    pub async fn search_med(&self, client: &Client, search_key: String, city_id: String, subject_id: String) -> Result<Vec<SearchApiResponse>, Box<Error>> {
         let mut map = HashMap::new();
-        map.insert("search_key", "trần ngọc tài");
-        map.insert("category", "doctor");
-        map.insert("city_id", "medpro_79");
-        map.insert("limit", "3");
-        map.insert("offset", "1");
-        map.insert("subject_ids", "medpro_thankinh");
+        map.insert("search_key", search_key);
+        map.insert("category", String::from("doctor"));
+        map.insert("city_id", city_id);
+        map.insert("limit", String::from("3"));
+        map.insert("offset", String::from("1"));
+        map.insert("subject_ids", subject_id);
 
         let result = client.post("https://api-v2.medpro.com.vn/mongo/service/search")
             .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0")
@@ -94,47 +96,64 @@ impl MedService {
         Ok(deserialized_result)
     }
 
-    pub async fn check_appointment(&self, client: &Client) -> Result<AppointmentPicking, Box<dyn std::error::Error>> {
-        let search_response = self.search_med(client).await?;
+    pub async fn analyze_appointment(&self, client: &Client) -> Result<AppointmentPicking, Box<dyn std::error::Error>> {
+        let doctor_detail = self.mongo_doctor_repository
+            .get_doctor_by_doctor_name(String::from("trần ngọc tài")).await?;
 
-        if let Some(first_med) = search_response.first() {
-            if let Some(first_doctor_item) = first_med.results.first() {
-                let mut analyze_doctor = DoctorAppointment::default();
+        if let Some(doctor) = doctor_detail {
+            let search_response = self.search_med(
+                client,
+                doctor.doctor_name.to_owned(),
+                doctor.city_id.to_owned(),
+                doctor.subject_ref_id.to_owned(),
+            ).await?;
 
-                // Validate doctor details
-                if !self.validate_doctor(first_doctor_item, &mut analyze_doctor) {
-                    return Err(Box::<dyn std::error::Error>::from("Invalid doctor"));
+            if let Some(first_med) = search_response.first() {
+                if let Some(first_doctor_item) = first_med.results.first() {
+                    let mut analyze_doctor = DoctorAppointment::default();
+
+                    // Validate doctor details
+                    if !self.validate_doctor(first_doctor_item, &mut analyze_doctor, &doctor) {
+                        return Err(Box::<dyn std::error::Error>::from("Invalid doctor"));
+                    }
+
+                    // Fetch doctor appointments
+                    let doctor_appointment_result = self.get_appointments(
+                        client,
+                        analyze_doctor.subject_id.as_deref().unwrap(),
+                        analyze_doctor.doctor_id.as_deref().unwrap(),
+                        analyze_doctor.service_id.as_deref().unwrap(),
+                    ).await?;
+
+                    // Target date
+                    let target_date = NaiveDate::parse_from_str(doctor.target_date.as_str(), "%Y-%m-%d")?;
+
+                    // Process appointment and find available slot
+                    return doctor_appointment_result.days.iter()
+                        .find_map(|appointment| self.find_available_shift(appointment, target_date))
+                        .ok_or_else(|| "No appointment found".into());
                 }
-
-                // Fetch doctor appointments
-                let doctor_appointment_result = self.get_appointments(
-                    client,
-                    analyze_doctor.subject_id.as_deref().unwrap(),
-                    analyze_doctor.doctor_id.as_deref().unwrap(),
-                    analyze_doctor.service_id.as_deref().unwrap(),
-                ).await?;
-
-                // Target date
-                let target_date = NaiveDate::parse_from_str("2024-10-03", "%Y-%m-%d")?;
-
-                // Process appointment and find available slot
-                return doctor_appointment_result.days.iter()
-                    .find_map(|appointment| self.find_available_shift(appointment, target_date))
-                    .ok_or_else(|| "No appointment found".into());
             }
         }
 
-        Err("Search failed".into())
+        Err("Analyze appointment fail".into())
     }
 
-    fn validate_doctor(&self, doctor: &ResultItem, analyze_doctor: &mut DoctorAppointment) -> bool {
+    pub async fn get_doctor(&self) -> Result<Doctor, Box<dyn std::error::Error>> {
+        let doctor_detail = self.mongo_doctor_repository
+            .get_doctor_by_doctor_ref_id(String::from("umc_453"))
+            .await?;
+        Ok(doctor_detail.unwrap())
+    }
+
+    fn validate_doctor(&self, doctor: &ResultItem, analyze_doctor: &mut DoctorAppointment, doctor_detail: &Doctor) -> bool {
         // Check doctor's name
-        let is_valid_doctor = doctor.title.as_deref() == Some("Trần Ngọc Tài");
+        let is_valid_doctor = doctor.title.as_deref() == Some(doctor_detail.doctor_name.as_str());
 
         // Check subject
         if let Some(subjects) = &doctor.subjects {
             if let Some(target_subject) = subjects.iter().find(|subject| {
-                subject.name.as_ref().map_or(false, |name| name.to_lowercase().contains("parkinson"))
+                subject.name.as_ref().map_or(false, |name| name.to_lowercase().contains(doctor_detail.subject_name.as_str()))
             }) {
                 analyze_doctor.subject_id = Some(target_subject.id.clone());
             } else {
@@ -145,9 +164,9 @@ impl MedService {
         // Check service
         if let Some(services) = &doctor.services {
             if let Some(target_service) = services.iter().find(|service| {
-                service.name.as_ref().map_or(false, |name| name.to_lowercase() == "khám dịch vụ")
+                service.name.as_ref().map_or(false, |name| name.to_lowercase() == doctor_detail.service_name.as_str())
                     && service.subject_names.as_ref().map_or(false, |names| {
-                    names.iter().any(|name| name.to_lowercase().contains("parkinson"))
+                    names.iter().any(|name| name.to_lowercase().contains(doctor_detail.subject_name.as_str()))
                 })
             }) {
                 analyze_doctor.service_id = Some(target_service.id.clone());
@@ -158,7 +177,7 @@ impl MedService {
 
         // Check partner and city ID
         let partner_valid = doctor.partner.as_ref().map_or(false, |partner| {
-            partner.partner_id.as_deref() == Some("umc") && partner.city_id.as_deref() == Some("medpro_79")
+            partner.partner_id.as_deref() == Some(doctor_detail.hospital_id.as_str()) && partner.city_id.as_deref() == Some(doctor_detail.city_id.as_str())
         });
 
         analyze_doctor.doctor_id = doctor.id.clone();
@@ -193,7 +212,7 @@ impl MedService {
                         appointment_date: Some(target_date.num_days_from_ce() as i64),
                         available_slot: Some(available_slots),
                         doctor_change_info: shift.doctor_change_info.clone(),
-                    })
+                    });
                 }
                 None
             })
@@ -203,19 +222,21 @@ impl MedService {
     }
 }
 
-#[derive(Default)]
 pub struct MedServiceBuilder {
-    bar: String,
+    mongo_doctor_repository: MongoDoctorRepository,
 }
 
 impl MedServiceBuilder {
-    pub fn new() -> MedServiceBuilder {
+    pub fn new(collection: Collection<Doctor>) -> MedServiceBuilder {
+        let mongo_doctor_repository = MongoDoctorRepositoryBuilder::new(collection).build();
         MedServiceBuilder {
-            bar: String::from("X"),
+            mongo_doctor_repository,
         }
     }
 
     pub fn build(self) -> MedService {
-        MedService { bar: self.bar }
+        MedService {
+            mongo_doctor_repository: self.mongo_doctor_repository,
+        }
     }
 }

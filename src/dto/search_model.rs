@@ -171,3 +171,9 @@ pub struct Partner {
     pub new_hospital_types: Option<Vec<u32>>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiSearchRequest {
+    pub search_key: String,
+    pub subject_id: String,
+    pub city_id: String,
+}

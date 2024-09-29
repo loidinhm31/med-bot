@@ -1,12 +1,19 @@
+use crate::dto::search_model::ApiSearchRequest;
 use crate::AppState;
+use actix_web::web::Json;
 use actix_web::{get, web, HttpResponse, Responder};
 
 #[get("/med/search")]
-async fn search_med(data: web::Data<AppState>) -> impl Responder {
+async fn search_med(data: web::Data<AppState>, api_search_request: Json<ApiSearchRequest>) -> impl Responder {
     println!("search_med");
 
     let result = data.service.med_service
-        .search_med(&data.client)
+        .search_med(
+            &data.client,
+            api_search_request.search_key.to_owned(),
+            api_search_request.city_id.to_owned(),
+            api_search_request.subject_id.to_owned(),
+        )
         .await;
 
     match result {
@@ -55,11 +62,35 @@ async fn get_appointments(data: web::Data<AppState>) -> impl Responder {
     }
 }
 
-#[get("/med/analyze")]
+#[get("/med/appointments/analyze")]
 async fn analyze(data: web::Data<AppState>) -> impl Responder {
     println!("analyze_med");
 
-    let result = data.service.med_service.check_appointment(&data.client).await;
+    let result = data.service.med_service.analyze_appointment(&data.client).await;
+    match result {
+        Ok(response) => {
+            // Try to deserialize the response into ApiResponse
+            match serde_json::to_string(&response) {
+                Ok(json_response) => HttpResponse::Ok()
+                    .content_type("application/json")
+                    .body(json_response),
+                Err(e) => {
+                    eprintln!("{:?}", e);
+                    HttpResponse::InternalServerError()
+                        .body("Failed to serialize response to JSON")
+                }
+            }
+        }
+        Err(e) => HttpResponse::NotFound()
+            .body(format!("Request unavailable: {}", e)),
+    }
+}
+
+#[get("/med/doctor")]
+async fn get_doctor(data: web::Data<AppState>) -> impl Responder {
+    println!("get_doctor");
+
+    let result = data.service.med_service.get_doctor().await;
     match result {
         Ok(response) => {
             // Try to deserialize the response into ApiResponse

@@ -1,5 +1,5 @@
+use crate::dto::appointment_model::{DoctorChangeInfo, TimeSlot};
 use serde::{Deserialize, Serialize};
-use crate::models::appointment_model::{DoctorChangeInfo, TimeSlot};
 
 #[derive(Default, Debug)]
 pub struct DoctorAppointment {
