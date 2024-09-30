@@ -56,14 +56,14 @@ async fn main() -> std::io::Result<()> {
 
     match env_profile.as_str() {
         "local" => dotenv::from_filename(".env.local").ok(),
-        "dev" => dotenv::from_filename(".env.dev").ok(),
-        "release" => dotenv::from_filename(".env.release").ok(),
+        "dev" => dotenv::from_filename("../../.env.dev").ok(),
+        "release" => dotenv::from_filename("../../.env.release").ok(),
         _ => dotenv().ok(),  // Default to loading .env
     };
 
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    log::info!("Starting HTTP server: go to http://127.0.0.1:8082");
+    log::info!("Starting HTTP server: go to http://0.0.0.0:8082");
 
     // Config
     let mongo_client = MongoClientBuilder::new().await
@@ -115,7 +115,7 @@ async fn main() -> std::io::Result<()> {
             .service(med_handler::analyze)
             .service(med_handler::get_doctor)
     })
-        .bind(("127.0.0.1", 8082))?
+        .bind(("0.0.0.0", 8082))?
         .run()
         .await
 }

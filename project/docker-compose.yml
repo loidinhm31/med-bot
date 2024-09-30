@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  med-bot:
+    build:
+      context: ./../med-bot-service
+      dockerfile: ./../project/docker/Dockerfile
+    ports:
+      - "8082:8082"
+    environment:
+      - APP_ENV=dev
+    deploy:
+      mode: replicated
+      replicas: 1

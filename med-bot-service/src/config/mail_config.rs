@@ -41,7 +41,7 @@ impl MailClientBuilder {
         let smtp_username = match env::var("SMTP_USERNAME") {
             Ok(v) => v.to_string(),
             Err(_) => {
-                eprintln!("Error loading SMTP USERNAME from env");
+                eprintln!("Error loading SMTP_USERNAME from env");
                 "UNKNOWN".to_string()
             }
         };
@@ -49,7 +49,7 @@ impl MailClientBuilder {
         let smtp_password = match env::var("SMTP_PASSWORD") {
             Ok(v) => v.to_string(),
             Err(_) => {
-                eprintln!("Error loading SMTP PASSWORD from env");
+                eprintln!("Error loading SMTP_PASSWORD from env");
                 "UNKNOWN".to_string()
             }
         };
@@ -57,7 +57,7 @@ impl MailClientBuilder {
         let from_email = match env::var("FROM_EMAIL") {
             Ok(v) => v.to_string(),
             Err(_) => {
-                eprintln!("Error loading FROM EMAIL from env");
+                eprintln!("Error loading FROM_EMAIL from env");
                 "UNKNOWN".to_string()
             }
         };
@@ -65,7 +65,7 @@ impl MailClientBuilder {
         let target_email = match env::var("TARGET_EMAIL") {
             Ok(v) => v.to_string(),
             Err(_) => {
-                eprintln!("Error loading TARGET EMAIL from env");
+                eprintln!("Error loading TARGET_EMAIL from env");
                 "UNKNOWN".to_string()
             }
         };

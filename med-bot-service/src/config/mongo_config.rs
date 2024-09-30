@@ -32,7 +32,7 @@ impl MongoClientBuilder {
         let uri = match env::var("MONGODB_URI") {
             Ok(v) => v.to_string(),
             Err(_) => {
-                eprintln!("Error loading MongoDB URI from env, using default");
+                eprintln!("Error loading MONGODB_URI from env, using default");
                 "mongodb://localhost:27017".to_string()  // Default to localhost
             }
         };

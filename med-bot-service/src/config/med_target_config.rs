@@ -28,7 +28,7 @@ impl MedTargetBuilder {
         let appointment_api = match env::var("APPOINTMENT_API") {
             Ok(v) => v.to_string(),
             Err(_) => {
-                eprintln!("Error loading APPOINTMENT API from env");
+                eprintln!("Error loading APPOINTMENT_API from env");
                 "UNKNOWN".to_string()
             }
         };
@@ -36,7 +36,7 @@ impl MedTargetBuilder {
         let search_med_api = match env::var("SEARCH_MED_API") {
             Ok(v) => v.to_string(),
             Err(_) => {
-                eprintln!("Error loading SEARCH MED API from env");
+                eprintln!("Error loading SEARCH_MED_API from env");
                 "UNKNOWN".to_string()
             }
         };
@@ -44,7 +44,7 @@ impl MedTargetBuilder {
         let origin_header = match env::var("ORIGIN_HEADER") {
             Ok(v) => v.to_string(),
             Err(_) => {
-                eprintln!("Error loading ORIGIN HEADER from env");
+                eprintln!("Error loading ORIGIN_HEADER from env");
                 "UNKNOWN".to_string()
             }
         };
@@ -52,7 +52,7 @@ impl MedTargetBuilder {
         let appid_header = match env::var("APPID_HEADER") {
             Ok(v) => v.to_string(),
             Err(_) => {
-                eprintln!("Error loading APPID HEADER from env");
+                eprintln!("Error loading APPID_HEADER from env");
                 "UNKNOWN".to_string()
             }
         };
