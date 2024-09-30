@@ -8,16 +8,18 @@ use cron::TimeUnitSpec;
 use mongodb::Collection;
 use reqwest::{Client, Error};
 use std::collections::HashMap;
+use crate::services::mail_service::MailService;
 
 pub struct MedService {
     mongo_doctor_repository: MongoDoctorRepository,
+    mail_service: MailService,
 }
 
 impl MedService {}
 
 impl MedService {
-    pub fn builder(collection: Collection<Doctor>) -> MedServiceBuilder {
-        MedServiceBuilder::new(collection)
+    pub fn builder(collection: Collection<Doctor>, mail_service: MailService) -> MedServiceBuilder {
+        MedServiceBuilder::new(collection, mail_service)
     }
 
     pub async fn search_med(&self, client: &Client, search_key: String, city_id: String, subject_id: String) -> Result<Vec<SearchApiResponse>, Box<Error>> {
@@ -125,13 +127,19 @@ impl MedService {
                         analyze_doctor.service_id.as_deref().unwrap(),
                     ).await?;
 
-                    // Target date
-                    let target_date = NaiveDate::parse_from_str(doctor.target_date.as_str(), "%Y-%m-%d")?;
-
                     // Process appointment and find available slot
-                    return doctor_appointment_result.days.iter()
-                        .find_map(|appointment| self.find_available_shift(appointment, target_date))
-                        .ok_or_else(|| "No appointment found".into());
+                    let checked_appointments = doctor_appointment_result.days.iter()
+                        .find_map(|appointment| self.find_available_shift(
+                            appointment,
+                            doctor.doctor_name.clone(),
+                            doctor.target_date.clone())
+                        );
+
+
+                    if let Some(checked_appointments) = checked_appointments {
+                        self.mail_service.send_email(&checked_appointments)?;
+                        return Ok(checked_appointments)
+                    }
                 }
             }
         }
@@ -184,10 +192,21 @@ impl MedService {
         is_valid_doctor && partner_valid
     }
 
-    fn find_available_shift(&self, appointment: &Day, target_date: NaiveDate) -> Option<AppointmentPicking> {
+    fn find_available_shift(&self, appointment: &Day, doctor_name: String, target_date: String) -> Option<AppointmentPicking> {
+        // Target date
+        let naive_target_date = NaiveDate::parse_from_str(target_date.as_str(), "%Y-%m-%d").unwrap();
+
         let appointment_date = NaiveDateTime::from_timestamp_millis(appointment.date?).unwrap().date();
 
-        if appointment_date == target_date {
+        let mut result_appointment = AppointmentPicking {
+            doctor_name: Some(doctor_name.clone()),
+            appointment_day: None,
+            appointment_date: Some(target_date.clone()),
+            available_slot: None,
+            doctor_change_info: None,
+        };
+
+        if appointment_date == naive_target_date {
             // Find a shift with available slots
             appointment.shifts.iter().find_map(|shift| {
                 let available_slots: Vec<TimeSlot> = shift.time_slot_in_day.as_ref()?.iter()
@@ -207,36 +226,38 @@ impl MedService {
 
                 if !available_slots.is_empty() {
                     return Some(AppointmentPicking {
-                        doctor_name: None,
-                        appointment_day: Some(appointment.date.unwrap()),
-                        appointment_date: Some(target_date.num_days_from_ce() as i64),
+                        appointment_day: shift.days.clone(),
                         available_slot: Some(available_slots),
                         doctor_change_info: shift.doctor_change_info.clone(),
+                        ..result_appointment.clone()
                     });
                 }
-                None
+                Some(result_appointment.clone())
             })
         } else {
-            None
+            Some(result_appointment.clone())
         }
     }
 }
 
 pub struct MedServiceBuilder {
     mongo_doctor_repository: MongoDoctorRepository,
+    mail_service: MailService,
 }
 
 impl MedServiceBuilder {
-    pub fn new(collection: Collection<Doctor>) -> MedServiceBuilder {
+    pub fn new(collection: Collection<Doctor>, mail_service: MailService) -> MedServiceBuilder {
         let mongo_doctor_repository = MongoDoctorRepositoryBuilder::new(collection).build();
         MedServiceBuilder {
             mongo_doctor_repository,
+            mail_service,
         }
     }
 
     pub fn build(self) -> MedService {
         MedService {
             mongo_doctor_repository: self.mongo_doctor_repository,
+            mail_service: self.mail_service,
         }
     }
 }

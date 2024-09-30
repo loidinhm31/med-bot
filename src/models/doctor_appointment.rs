@@ -8,11 +8,11 @@ pub struct DoctorAppointment {
     pub service_id: Option<String>,
 }
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct AppointmentPicking {
     pub doctor_name: Option<String>,
-    pub appointment_day: Option<i64>,
-    pub appointment_date: Option<i64>,
+    pub appointment_day: Option<String>,
+    pub appointment_date: Option<String>,
     pub available_slot: Option<Vec<TimeSlot>>,
     pub doctor_change_info: Option<DoctorChangeInfo>,
 }

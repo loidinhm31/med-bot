@@ -6,13 +6,20 @@ mod config;
 mod services;
 mod dto;
 
-use crate::config::config::{MongoClient, MongoClientBuilder};
+use std::env;
+use crate::config::mongo_config::{MongoClient, MongoClientBuilder};
 use crate::handlers::med_handler;
 use crate::scheduler::start_scheduler;
 use crate::services::med_service;
 use crate::services::med_service::{MedService, MedServiceBuilder};
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
+use dotenv::dotenv;
+use lettre::{Message, SmtpTransport, Transport};
+use lettre::message::{MultiPart, SinglePart};
+use lettre::transport::smtp::authentication::Credentials;
 use reqwest::Client;
+use crate::config::mail_config::MailClientBuilder;
+use crate::services::mail_service::MailServiceBuilder;
 
 #[get("/healthz")]
 async fn health() -> impl Responder {
@@ -43,6 +50,16 @@ struct ServiceState {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // Load the correct .env file based on the environment
+    let env_profile = env::var("APP_ENV").unwrap_or_else(|_| "local".to_string());
+
+    match env_profile.as_str() {
+        "local" => dotenv::from_filename(".env.local").ok(),
+        "dev" => dotenv::from_filename(".env.dev").ok(),
+        "release" => dotenv::from_filename(".env.release").ok(),
+        _ => dotenv().ok(),  // Default to loading .env
+    };
+
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
     log::info!("Starting HTTP server: go to http://127.0.0.1:8082");
@@ -53,7 +70,16 @@ async fn main() -> std::io::Result<()> {
         .with_doctor_collection()
         .build();
 
-    let med_service = MedServiceBuilder::new(mongo_client.doctor_collection.clone())
+    let mail_client = MailClientBuilder::new()
+        .build();
+
+    let mail_service = MailServiceBuilder::new(mail_client)
+        .build();
+
+    let med_service = MedServiceBuilder::new(
+        mongo_client.doctor_collection.clone(),
+        mail_service.clone(),
+    )
         .build();
 
     let app_state = web::Data::new(AppState {
