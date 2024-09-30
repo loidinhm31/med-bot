@@ -30,14 +30,19 @@ impl MongoClientBuilder {
     pub async fn new() -> MongoClientBuilder {
         dotenv().ok();
         let uri = match env::var("MONGODB_URI") {
-            Ok(v) => v.to_string(),
+            Ok(v) => {
+                log::info!("Using MONGODB_URI: {}", &v);
+                v.to_string()
+            },
             Err(_) => {
-                eprintln!("Error loading MONGODB_URI from env, using default");
+                log::error!("Error loading MONGODB_URI from env, using default");
                 "mongodb://localhost:27017".to_string()  // Default to localhost
             }
         };
 
         let client = Client::with_uri_str(uri).await.expect("failed to connect");
+
+        log::info!("Connected to mongodb");
 
         MongoClientBuilder {
             client,

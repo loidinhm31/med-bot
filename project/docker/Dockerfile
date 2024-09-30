@@ -29,9 +29,7 @@ WORKDIR /app
 RUN install_packages libssl3
 
 # Copy the .env file
-COPY .env /app/.env
-COPY .env.dev /app/.env.dev
-COPY .env.release /app/.env.release
+COPY /config /etc/config
 
 # copy server binary from build stage
 #COPY --from=builder /code/target/release/med-bot med-bot

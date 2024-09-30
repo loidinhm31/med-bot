@@ -51,17 +51,20 @@ struct ServiceState {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+
     // Load the correct .env file based on the environment
     let env_profile = env::var("APP_ENV").unwrap_or_else(|_| "local".to_string());
 
+    log::info!("Environment: {}", env_profile);
+
     match env_profile.as_str() {
-        "local" => dotenv::from_filename(".env.local").ok(),
-        "dev" => dotenv::from_filename("../../.env.dev").ok(),
-        "release" => dotenv::from_filename("../../.env.release").ok(),
+        "local" => dotenv::from_filename("./config/.env.local").ok(),
+        "dev" => dotenv::from_filename("/etc/config/.env.dev").ok(),
+        "release" => dotenv::from_filename("/etc/config/.env.release").ok(),
         _ => dotenv().ok(),  // Default to loading .env
     };
 
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
     log::info!("Starting HTTP server: go to http://0.0.0.0:8082");
 

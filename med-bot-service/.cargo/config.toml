@@ -1,5 +1,5 @@
 [env]
-APP_ENV = "dev"
+APP_ENV = "local"
 
 [profile.dev]
 debug = true
