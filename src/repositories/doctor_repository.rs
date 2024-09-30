@@ -45,6 +45,21 @@ impl MongoDoctorRepository {
             Err(e) => Err(e),
         }
     }
+
+    pub async fn get_target_doctor(&self) -> Result<Option<Doctor>, Error> {
+        let filter = doc! {
+            "current_target": true,
+            "active": true
+        };
+
+        match self.col
+            .find_one(filter)
+            .await {
+            Ok(Some(doctor_detail)) => Ok(Some(doctor_detail)),
+            Ok(None) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
 }
 
 

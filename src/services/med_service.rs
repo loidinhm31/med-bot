@@ -3,14 +3,16 @@ use crate::dto::search_model::{ResultItem, SearchApiResponse};
 use crate::models::doctor_appointment::{AppointmentPicking, DoctorAppointment};
 use crate::models::documents::Doctor;
 use crate::repositories::doctor_repository::{MongoDoctorRepository, MongoDoctorRepositoryBuilder};
-use chrono::{Datelike, NaiveDate, NaiveDateTime};
+use crate::services::mail_service::MailService;
+use chrono::{NaiveDate, NaiveDateTime};
 use cron::TimeUnitSpec;
 use mongodb::Collection;
 use reqwest::{Client, Error};
 use std::collections::HashMap;
-use crate::services::mail_service::MailService;
+use crate::config::med_target_config::MedTarget;
 
 pub struct MedService {
+    med_target: MedTarget,
     mongo_doctor_repository: MongoDoctorRepository,
     mail_service: MailService,
 }
@@ -18,8 +20,8 @@ pub struct MedService {
 impl MedService {}
 
 impl MedService {
-    pub fn builder(collection: Collection<Doctor>, mail_service: MailService) -> MedServiceBuilder {
-        MedServiceBuilder::new(collection, mail_service)
+    pub fn builder(med_target: MedTarget, collection: Collection<Doctor>, mail_service: MailService) -> MedServiceBuilder {
+        MedServiceBuilder::new(med_target, collection, mail_service)
     }
 
     pub async fn search_med(&self, client: &Client, search_key: String, city_id: String, subject_id: String) -> Result<Vec<SearchApiResponse>, Box<Error>> {
@@ -31,7 +33,7 @@ impl MedService {
         map.insert("offset", String::from("1"));
         map.insert("subject_ids", subject_id);
 
-        let result = client.post("https://api-v2.medpro.com.vn/mongo/service/search")
+        let result = client.post(self.med_target.search_med_api.clone())
             .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0")
             .header("Accept", "application/json, text/plain, */*")
             .header("Accept-Language", "en-US,en;q=0.5")
@@ -39,9 +41,9 @@ impl MedService {
             .header("Content-Type", "application/json;charset=utf-8")
             .header("locale", "vi")
             .header("platform", "web")
-            .header("Origin", "https://medpro.vn")
+            .header("Origin", self.med_target.origin_header.clone())
             .header("Connection", "keep-alive")
-            .header("Referer", "https://medpro.vn/")
+            .header("Referer", self.med_target.origin_header.clone())
             .header("Sec-Fetch-Dest", "empty")
             .header("Sec-Fetch-Mode", "cors")
             .header("Sec-Fetch-Site", "cross-site")
@@ -60,26 +62,26 @@ impl MedService {
         Ok(deserialized_result)
     }
 
-    pub async fn get_appointments(&self, client: &Client, subject_id: &str, doctor_id: &str, service_id: &str) -> Result<AppointmentApiResponse, Box<Error>> {
+    pub async fn get_appointments(&self, client: &Client, subject_id: String, doctor_id: String, service_id: String, partner_id: String) -> Result<AppointmentApiResponse, Box<Error>> {
         let mut map = HashMap::new();
         map.insert("subjectId", subject_id);
         map.insert("doctorId", doctor_id);
         map.insert("serviceId", service_id);
-        map.insert("treeId", "DATE");
+        map.insert("treeId", "DATE".parse().unwrap());
 
-        let result = client.post("https://api-v2.medpro.com.vn/his-gateway/booking-tree-dynamic-current-node")
+        let result = client.post(self.med_target.appointment_api.clone())
             .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:130.0) Gecko/20100101 Firefox/130.0")
             .header("Accept", "application/json, text/plain, */*")
             .header("Accept-Language", "en-US,en;q=0.5")
             .header("Accept-Encoding", "gzip, deflate, br, zstd")
             .header("Content-Type", "application/json;charset=utf-8")
-            .header("partnerid", "umc")
-            .header("appid", "medpro")
+            .header("partnerid", partner_id)
+            .header("appid", self.med_target.appid_header.clone())
             .header("locale", "vi")
             .header("platform", "pc")
-            .header("Origin", "https://medpro.vn")
+            .header("Origin", self.med_target.origin_header.clone())
             .header("Connection", "keep-alive")
-            .header("Referer", "https://medpro.vn/")
+            .header("Referer", self.med_target.origin_header.clone())
             .header("Sec-Fetch-Dest", "empty")
             .header("Sec-Fetch-Mode", "cors")
             .header("Sec-Fetch-Site", "cross-site")
@@ -100,16 +102,17 @@ impl MedService {
 
     pub async fn analyze_appointment(&self, client: &Client) -> Result<AppointmentPicking, Box<dyn std::error::Error>> {
         let doctor_detail = self.mongo_doctor_repository
-            .get_doctor_by_doctor_name(String::from("trần ngọc tài")).await?;
+            .get_target_doctor().await?;
 
         if let Some(doctor) = doctor_detail {
+            log::info!("Got doctor");
             let search_response = self.search_med(
                 client,
                 doctor.doctor_name.to_owned(),
                 doctor.city_id.to_owned(),
                 doctor.subject_ref_id.to_owned(),
             ).await?;
-
+            log::info!("Got search response");
             if let Some(first_med) = search_response.first() {
                 if let Some(first_doctor_item) = first_med.results.first() {
                     let mut analyze_doctor = DoctorAppointment::default();
@@ -122,23 +125,38 @@ impl MedService {
                     // Fetch doctor appointments
                     let doctor_appointment_result = self.get_appointments(
                         client,
-                        analyze_doctor.subject_id.as_deref().unwrap(),
-                        analyze_doctor.doctor_id.as_deref().unwrap(),
-                        analyze_doctor.service_id.as_deref().unwrap(),
+                        analyze_doctor.subject_id.as_deref().unwrap().to_string(),
+                        analyze_doctor.doctor_id.as_deref().unwrap().to_string(),
+                        analyze_doctor.service_id.as_deref().unwrap().to_string(),
+                        analyze_doctor.partner_id.as_deref().unwrap().to_string(),
                     ).await?;
+                    log::info!("Got appointments");
 
                     // Process appointment and find available slot
                     let checked_appointments = doctor_appointment_result.days.iter()
-                        .find_map(|appointment| self.find_available_shift(
-                            appointment,
-                            doctor.doctor_name.clone(),
-                            doctor.target_date.clone())
-                        );
-
+                        .find_map(|appointment| {
+                            log::info!("Checking appointment: {:?}", appointment);
+                            self.find_available_shift(
+                                appointment,
+                                doctor.doctor_name.clone(),
+                                doctor.target_date.clone(),
+                            )
+                        });
 
                     if let Some(checked_appointments) = checked_appointments {
                         self.mail_service.send_email(&checked_appointments)?;
                         return Ok(checked_appointments)
+                    } else {
+                        let result_appointment = AppointmentPicking {
+                            doctor_name: Some(doctor.doctor_name.clone()),
+                            appointment_day: None,
+                            appointment_date: Some(doctor.target_date.clone()),
+                            available_slot: None,
+                            doctor_change_info: None,
+                        };
+
+                        self.mail_service.send_email(&result_appointment)?;
+                        return Ok(result_appointment);
                     }
                 }
             }
@@ -149,7 +167,7 @@ impl MedService {
 
     pub async fn get_doctor(&self) -> Result<Doctor, Box<dyn std::error::Error>> {
         let doctor_detail = self.mongo_doctor_repository
-            .get_doctor_by_doctor_ref_id(String::from("umc_453"))
+            .get_doctor_by_doctor_ref_id(String::from("test_ref_id"))
             .await?;
         Ok(doctor_detail.unwrap())
     }
@@ -185,7 +203,12 @@ impl MedService {
 
         // Check partner and city ID
         let partner_valid = doctor.partner.as_ref().map_or(false, |partner| {
-            partner.partner_id.as_deref() == Some(doctor_detail.hospital_id.as_str()) && partner.city_id.as_deref() == Some(doctor_detail.city_id.as_str())
+            if partner.partner_id.as_deref() == Some(doctor_detail.hospital_id.as_str()) &&
+                partner.city_id.as_deref() == Some(doctor_detail.city_id.as_str()) {
+                analyze_doctor.partner_id = partner.partner_id.clone();
+                return true;
+            }
+            false
         });
 
         analyze_doctor.doctor_id = doctor.id.clone();
@@ -195,22 +218,19 @@ impl MedService {
     fn find_available_shift(&self, appointment: &Day, doctor_name: String, target_date: String) -> Option<AppointmentPicking> {
         // Target date
         let naive_target_date = NaiveDate::parse_from_str(target_date.as_str(), "%Y-%m-%d").unwrap();
+        log::info!("Checking for target date: {}", naive_target_date.clone());
 
         let appointment_date = NaiveDateTime::from_timestamp_millis(appointment.date?).unwrap().date();
-
-        let mut result_appointment = AppointmentPicking {
-            doctor_name: Some(doctor_name.clone()),
-            appointment_day: None,
-            appointment_date: Some(target_date.clone()),
-            available_slot: None,
-            doctor_change_info: None,
-        };
+        log::info!("Compare for appointment date: {}", appointment_date.clone());
 
         if appointment_date == naive_target_date {
+            log::info!("Found available items for target date");
             // Find a shift with available slots
             appointment.shifts.iter().find_map(|shift| {
+                log::info!("Shift: {:?}", shift.shift_code);
                 let available_slots: Vec<TimeSlot> = shift.time_slot_in_day.as_ref()?.iter()
                     .filter_map(|slot| {
+                        log::info!("Available Slot {}", slot.available_slot.clone().unwrap());
                         if let (Some(available_slot), Some(max_slot)) = (slot.available_slot, slot.max_slot) {
                             if available_slot > 0 && available_slot <= max_slot {
                                 return Some(TimeSlot {
@@ -226,29 +246,32 @@ impl MedService {
 
                 if !available_slots.is_empty() {
                     return Some(AppointmentPicking {
+                        doctor_name: Some(doctor_name.clone()),
+                        appointment_date: Some(target_date.clone()),
                         appointment_day: shift.days.clone(),
                         available_slot: Some(available_slots),
                         doctor_change_info: shift.doctor_change_info.clone(),
-                        ..result_appointment.clone()
                     });
                 }
-                Some(result_appointment.clone())
+                None
             })
         } else {
-            Some(result_appointment.clone())
+            None
         }
     }
 }
 
 pub struct MedServiceBuilder {
+    med_target: MedTarget,
     mongo_doctor_repository: MongoDoctorRepository,
     mail_service: MailService,
 }
 
 impl MedServiceBuilder {
-    pub fn new(collection: Collection<Doctor>, mail_service: MailService) -> MedServiceBuilder {
+    pub fn new(med_target: MedTarget, collection: Collection<Doctor>, mail_service: MailService) -> MedServiceBuilder {
         let mongo_doctor_repository = MongoDoctorRepositoryBuilder::new(collection).build();
         MedServiceBuilder {
+            med_target,
             mongo_doctor_repository,
             mail_service,
         }
@@ -256,6 +279,7 @@ impl MedServiceBuilder {
 
     pub fn build(self) -> MedService {
         MedService {
+            med_target: self.med_target,
             mongo_doctor_repository: self.mongo_doctor_repository,
             mail_service: self.mail_service,
         }

@@ -6,6 +6,7 @@ pub struct DoctorAppointment {
     pub subject_id: Option<String>,
     pub doctor_id: Option<String>,
     pub service_id: Option<String>,
+    pub partner_id: Option<String>,
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]

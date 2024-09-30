@@ -34,7 +34,7 @@ impl MailClientBuilder {
             Ok(v) => v.to_string(),
             Err(_) => {
                 eprintln!("Error loading SMTP HOST from env");
-                "UNKNOWN".to_string()  // Default to localhost
+                "UNKNOWN".to_string()
             }
         };
 
@@ -42,7 +42,7 @@ impl MailClientBuilder {
             Ok(v) => v.to_string(),
             Err(_) => {
                 eprintln!("Error loading SMTP USERNAME from env");
-                "UNKNOWN".to_string()  // Default to localhost
+                "UNKNOWN".to_string()
             }
         };
 
@@ -50,7 +50,7 @@ impl MailClientBuilder {
             Ok(v) => v.to_string(),
             Err(_) => {
                 eprintln!("Error loading SMTP PASSWORD from env");
-                "UNKNOWN".to_string()  // Default to localhost
+                "UNKNOWN".to_string()
             }
         };
 

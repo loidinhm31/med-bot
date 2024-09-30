@@ -1,5 +1,5 @@
 [package]
-name = "med-tool"
+name = "med-bot"
 version = "0.1.0"
 edition = "2021"
 
@@ -22,3 +22,7 @@ mongodb = "3"
 env_logger = "0.11"
 log = "0.4"
 dotenv = "0.15.0"
+
+[[bin]]
+name = "med-bot"
+path = "src/main.rs"

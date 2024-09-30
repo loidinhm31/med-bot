@@ -40,7 +40,13 @@ async fn get_appointments(data: web::Data<AppState>) -> impl Responder {
     println!("get_appointments");
 
     let result = data.service.med_service
-        .get_appointments(&data.client, "umc_P2", "umc_453", "umc_service-150000")
+        .get_appointments(
+            &data.client,
+            "test_subject_id".parse().unwrap(),
+            "test_doctor_id".parse().unwrap(),
+            "test_service_id".parse().unwrap(),
+            "test_partner_id".parse().unwrap(),
+        )
         .await;
 
     match result {

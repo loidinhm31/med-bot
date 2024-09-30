@@ -1,0 +1,8 @@
+[env]
+APP_ENV = "dev"
+
+[profile.dev]
+debug = true
+
+[profile.release]
+debug = false

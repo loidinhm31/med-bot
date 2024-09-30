@@ -19,6 +19,7 @@ use lettre::message::{MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
 use reqwest::Client;
 use crate::config::mail_config::MailClientBuilder;
+use crate::config::med_target_config::MedTargetBuilder;
 use crate::services::mail_service::MailServiceBuilder;
 
 #[get("/healthz")]
@@ -64,6 +65,7 @@ async fn main() -> std::io::Result<()> {
 
     log::info!("Starting HTTP server: go to http://127.0.0.1:8082");
 
+    // Config
     let mongo_client = MongoClientBuilder::new().await
         .with_dynamic_collection()
         .with_user_collection()
@@ -73,10 +75,15 @@ async fn main() -> std::io::Result<()> {
     let mail_client = MailClientBuilder::new()
         .build();
 
+    let med_target = MedTargetBuilder::new()
+        .build();
+
+    // Service
     let mail_service = MailServiceBuilder::new(mail_client)
         .build();
 
     let med_service = MedServiceBuilder::new(
+        med_target,
         mongo_client.doctor_collection.clone(),
         mail_service.clone(),
     )
@@ -90,14 +97,17 @@ async fn main() -> std::io::Result<()> {
         },
     });
 
+
     // Start scheduler on a new thread
+    let scheduler_state = app_state.clone();
     actix_rt::spawn(async move {
-        start_scheduler().await;
+        start_scheduler(scheduler_state).await;
     });
 
     HttpServer::new(move || {
+        let state_clone = app_state.clone();
         App::new()
-            .app_data(app_state.clone())
+            .app_data(state_clone)
             .service(health)
             .service(get_ips)
             .service(med_handler::search_med)

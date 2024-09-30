@@ -22,5 +22,6 @@ pub struct Doctor {
     pub hospital_id: String,
     pub city_id: String,
     pub target_date: String,
+    pub current_target: bool,
     pub active: bool,
 }

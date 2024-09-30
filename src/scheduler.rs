@@ -1,10 +1,14 @@
 use chrono::{Local, Utc};
 use cron::Schedule;
 use std::{str::FromStr, time::Duration};
+use actix_web::web::Data;
+use crate::AppState;
+use crate::services::med_service::MedService;
 
-pub async fn start_scheduler() {
+pub async fn start_scheduler(app_state: Data<AppState>) {
     //0   0   0/8  *   *  *
-    let expression = "1/50   *   *     *       *  *  *";
+    //1/50   *   *     *       *  *  *
+    let expression = "0   0   0/8  *   *  *";
     let schedule = Schedule::from_str(expression).unwrap();
 
     loop {
@@ -15,7 +19,10 @@ pub async fn start_scheduler() {
         if let Some(datetime) = upcoming.next() {
             if datetime.timestamp() <= local.timestamp() {
 
-                println!("{:?}", "test");
+                log::info!("Running schedule med bot");
+                app_state.service.med_service.analyze_appointment(&app_state.client)
+                    .await
+                    .expect("analyze appointment failed");
             }
         }
     }

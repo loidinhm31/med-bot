@@ -131,7 +131,7 @@ impl MailService {
             slots = slots
         );
 
-        log::info!("{}", self.mail_client.from_email.clone());
+        log::info!("Sending email from: {}", self.mail_client.from_email.clone());
 
         let from_email = format!(r#"MED bot <{}>"#,
                                  self.mail_client.from_email.to_string())
@@ -166,12 +166,12 @@ impl MailService {
         match mailer.send(&email_builder_content) {
             // If email was sent successfully, print confirmation message
             Ok(_) => {
-                println!("Email sent successfully!");
+                log::info!("Email sent successfully!");
                 Ok(())
             }
             // If there was an error sending the email, print the error
             Err(e) => {
-                eprintln!("Could not send email: {:?}", e);
+                log::error!("Could not send email: {:?}", e);
                 Err("Could not send email")
             }
         }
