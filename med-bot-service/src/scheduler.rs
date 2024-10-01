@@ -6,9 +6,9 @@ use crate::AppState;
 use crate::services::med_service::MedService;
 
 pub async fn start_scheduler(app_state: Data<AppState>) {
-    //0   0   0/8  *   *  *
-    //1/50   *   *     *       *  *  *
-    let expression = "0   0   0/8  *   *  *";
+    //0 0 0/8 * * *
+    //0 0/5 0 * * *
+    let expression = "0 0 0/8 * * *";
     let schedule = Schedule::from_str(expression).unwrap();
 
     loop {

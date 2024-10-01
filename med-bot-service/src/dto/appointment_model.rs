@@ -34,14 +34,26 @@ pub struct Day {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Shift {
     pub id: String,
+
+    #[serde(rename = "shiftName")]
     pub shift_name: Option<String>,
+
+    #[serde(rename = "shiftCode")]
     pub shift_code: Option<String>,
+
+    #[serde(rename = "startTime")]
     pub start_time: Option<String>,
+
+    #[serde(rename = "endTime")]
     pub end_time: Option<String>,
+
     pub duration: Option<u32>,
+
     pub days: Option<String>,
+
     pub services: Option<Vec<Service>>,
 
+    #[serde(rename = "maxSlot")]
     pub max_slot: Option<u32>,
 
     #[serde(rename = "doctorChange")]
@@ -63,11 +75,21 @@ pub struct Shift {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Service {
     pub id: String,
+
+    #[serde(rename = "subjectId")]
     pub subject_id: Option<String>,
+
+    #[serde(rename = "roomId")]
     pub room_id: Option<String>,
+
     pub price: Option<u32>,
+
     pub advanced: Option<u32>,
+
+    #[serde(rename = "serviceType")]
     pub service_type: Option<String>,
+
+    #[serde(rename = "roomType")]
     pub room_type: Option<String>,
 }
 
@@ -83,6 +105,7 @@ pub struct DoctorChangeInfo {
 
     #[serde(rename = "labelPrefix")]
     pub label_prefix: Option<String>,
+
     pub label: Option<String>,
 
     #[serde(rename = "reasonChangeDoctor")]
