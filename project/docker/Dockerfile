@@ -28,18 +28,21 @@ WORKDIR /app
 # Install required dependencies (OpenSSL)
 RUN install_packages libssl3
 
+# Install ca-certificates
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
 # Copy the .env file
 COPY /config /etc/config
 
 # copy server binary from build stage
 #COPY --from=builder /code/target/release/med-bot med-bot
-COPY /target/release/med-bot med-bot
+COPY /target/release/med-bot /app/med-bot
 
-# set user to non-root unless root is required for your app
+## set user to non-root unless root is required for your app
 USER 1001
 
-# indicate what port the server is running on
+## indicate what port the server is running on
 EXPOSE 8082
 
 # run server
-CMD [ "/app/med-bot" ]
+CMD ["/app/med-bot"]
