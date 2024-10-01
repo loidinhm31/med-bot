@@ -27,7 +27,7 @@ impl MailService {
                     slot.available_slot.unwrap_or(0)
                 )
             }).collect::<Vec<String>>().join("")
-        }).unwrap_or_else(|| "<tr><td colspan='3'>No available slots</td></tr>".to_string());
+        }).unwrap_or_else(|| "<tr><td colspan='4'>No available slots</td></tr>".to_string());
 
 
         let html_content = format!(
