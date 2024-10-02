@@ -9,6 +9,7 @@ services:
       - "8082:8082"
     environment:
       - APP_ENV=dev
+    restart: always
     deploy:
       mode: replicated
       replicas: 1
